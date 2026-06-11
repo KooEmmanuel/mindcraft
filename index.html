@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MINDCRAFT — a voxel world built by Claude Fable 5</title>
+  <meta name="description" content="A Minecraft-style voxel game running in your browser. Procedural terrain, caves, day/night cycle — built live by Claude Fable 5." />
+  <meta property="og:title" content="MINDCRAFT — a voxel world built by AI" />
+  <meta property="og:description" content="Infinite procedural terrain, caves, building, day/night — entirely in your browser. Built by Claude Fable 5 for emmanuelnyatefe.com." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='10' y='6' fill='%238a5a2b'/><rect width='16' height='6' fill='%235fae2e'/></svg>" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+    body { font-family: 'Courier New', monospace; user-select: none; }
+    #game canvas { display: block; }
+
+    /* Overlay (title / pause) */
+    #overlay {
+      position: fixed; inset: 0; z-index: 20;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      background: rgba(8, 12, 24, 0.82); backdrop-filter: blur(3px); color: #fff; text-align: center;
+    }
+    #logo {
+      font-size: clamp(42px, 9vw, 84px); font-weight: 900; letter-spacing: 6px;
+      color: #fff; text-shadow: 0 5px 0 #3a3a3a, 0 10px 24px rgba(0,0,0,.6);
+    }
+    #logo span { color: #6abe30; }
+    #subtitle { color: #9fb4d8; font-size: 14px; letter-spacing: 2px; }
+    #overlay-state { color: #ffd45e; font-size: 16px; letter-spacing: 3px; text-transform: uppercase; }
+    #play {
+      font-family: inherit; font-size: 18px; font-weight: 700; letter-spacing: 2px;
+      padding: 14px 46px; cursor: pointer; color: #fff;
+      background: #5fae2e; border: none; border-bottom: 5px solid #3d7a1c; border-radius: 4px;
+    }
+    #play:hover { background: #6fc23a; }
+    #controls {
+      display: grid; grid-template-columns: auto auto; gap: 6px 18px;
+      font-size: 13px; color: #c6d4ea; text-align: left; margin-top: 6px;
+    }
+    #controls b { color: #fff; }
+    #seed-label { color: #5c6f8f; font-size: 12px; margin-top: 8px; }
+
+    /* HUD */
+    #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+    #crosshair {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 18px; height: 18px; opacity: .85;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: #fff; mix-blend-mode: difference;
+    }
+    #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+    #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+
+    #hotbar {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 4px; padding: 4px; background: rgba(0,0,0,.45); border-radius: 6px;
+    }
+    .slot {
+      position: relative; width: 48px; height: 48px; border: 2px solid rgba(255,255,255,.35);
+      border-radius: 4px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.3);
+    }
+    .slot.selected { border-color: #fff; background: rgba(255,255,255,.18); }
+    .slot canvas { width: 36px; height: 36px; image-rendering: pixelated; }
+    .slot span { position: absolute; top: 1px; left: 4px; font-size: 10px; color: rgba(255,255,255,.75); }
+    #block-name {
+      position: absolute; bottom: 78px; left: 50%; transform: translateX(-50%);
+      color: #fff; font-size: 13px; letter-spacing: 1px; text-shadow: 0 2px 4px rgba(0,0,0,.8);
+    }
+
+    #stats {
+      position: absolute; top: 12px; left: 12px; color: #fff; font-size: 12px;
+      text-shadow: 0 1px 3px rgba(0,0,0,.9); line-height: 1.7;
+    }
+    #watermark {
+      position: absolute; top: 12px; right: 14px; color: rgba(255,255,255,.75); font-size: 11px;
+      letter-spacing: 1px; text-align: right; text-shadow: 0 1px 3px rgba(0,0,0,.9); line-height: 1.6;
+    }
+    #watermark b { color: #6abe30; }
+    #score {
+      position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+      color: #ffd45e; font-size: 20px; font-weight: 700; letter-spacing: 2px;
+      text-shadow: 0 2px 4px rgba(0,0,0,.85);
+    }
+    #tip {
+      position: absolute; top: 18%; left: 50%; transform: translateX(-50%);
+      color: #ffd45e; font-size: 15px; letter-spacing: 1px; opacity: 0; transition: opacity .4s;
+      text-shadow: 0 2px 4px rgba(0,0,0,.8);
+    }
+    #race {
+      position: absolute; top: 46px; left: 50%; transform: translateX(-50%);
+      color: #4dff6a; font-size: 15px; font-weight: 700; letter-spacing: 1px;
+      text-shadow: 0 2px 4px rgba(0,0,0,.85);
+    }
+    #hitflash {
+      position: fixed; inset: 0; z-index: 6; pointer-events: none;
+      background: radial-gradient(ellipse at center, transparent 40%, rgba(220,40,40,.55) 100%);
+      opacity: 0; transition: opacity .15s;
+    }
+    #underwater {
+      position: fixed; inset: 0; z-index: 5; pointer-events: none;
+      background: rgba(20, 60, 160, 0.32); opacity: 0; transition: opacity .25s;
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="underwater"></div>
+  <div id="hitflash"></div>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="stats">
+      <div id="fps"></div>
+      <div id="coords"></div>
+    </div>
+    <div id="watermark"><b>MINDCRAFT</b><br>built by Claude Fable 5</div>
+    <div id="score">◆ 0</div>
+    <div id="race" style="display:none"></div>
+    <div id="tip"></div>
+    <div id="block-name"></div>
+    <div id="hotbar"></div>
+  </div>
+
+  <div id="overlay">
+    <div id="logo">MIND<span>CRAFT</span></div>
+    <div id="subtitle">AN INFINITE VOXEL WORLD — BUILT BY CLAUDE FABLE 5</div>
+    <div style="color:#8fa8cf;font-size:13px">Build · drive the kart · blast slimes · race the gates · collect shards ◆</div>
+    <div id="overlay-state"></div>
+    <button id="play">▶ PLAY</button>
+    <div id="controls">
+      <b>WASD</b><span>move</span>
+      <b>Mouse</b><span>look</span>
+      <b>Left click</b><span>break block</span>
+      <b>Right click</b><span>place block</span>
+      <b>1–9 / scroll</b><span>choose block</span>
+      <b>Space</b><span>jump / swim / fly up</span>
+      <b>Shift</b><span>sprint</span>
+      <b>V</b><span>first / third person view</span>
+      <b>G</b><span>get in / out of the kart 🏎</span>
+      <b>X / click (in kart)</b><span>shoot fireballs</span>
+      <b>R</b><span>start gate race 🏁</span>
+      <b>F</b><span>toggle fly mode</span>
+      <b>C</b><span>fly down</span>
+      <b>H</b><span>hide HUD (for screenshots)</span>
+    </div>
+    <div id="seed-label"></div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
