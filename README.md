@@ -8,7 +8,7 @@ No game engine. No assets. No build step. Every texture, sound, character, and w
 
 ## ▶ Play
 
-**[Play it in your browser →](https://emmanuel-inc.github.io/mindcraft/)**
+**[Play it in your browser →](https://kooemmanuel.github.io/mindcraft/)**
 
 Or run it locally — it's pure static files:
 
